@@ -28,7 +28,7 @@ var (
 				cancel()
 			}()
 
-			s.StartWatcher()
+			s.StartWatcher(ctx)
 
 			sig := make(chan os.Signal, 1)
 			signals := []os.Signal{syscall.SIGTERM, os.Interrupt, syscall.SIGINT}
