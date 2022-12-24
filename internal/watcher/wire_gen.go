@@ -10,6 +10,7 @@ import (
 	"context"
 	"github.com/jm199seo/dhg_bot/pkg/discord"
 	"github.com/jm199seo/dhg_bot/pkg/loa_api"
+	"github.com/jm199seo/dhg_bot/pkg/mongo"
 	"github.com/spf13/viper"
 )
 
@@ -30,7 +31,21 @@ func InitializeWatcher(ctx context.Context, cfg *viper.Viper) (*Server, func(), 
 		return nil, nil, err
 	}
 	discordClient := discord.NewClient(discordConfig)
-	server := NewServer(config, client, discordClient)
+	mongoConfig, err := mongo.ProvideConfigFromEnvironment(cfg)
+	if err != nil {
+		return nil, nil, err
+	}
+	mongoClient, cleanup, err := mongo.NewClient(mongoConfig)
+	if err != nil {
+		return nil, nil, err
+	}
+	server, cleanup2, err := NewServer(config, client, discordClient, mongoClient)
+	if err != nil {
+		cleanup()
+		return nil, nil, err
+	}
 	return server, func() {
+		cleanup2()
+		cleanup()
 	}, nil
 }

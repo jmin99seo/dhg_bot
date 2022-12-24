@@ -2,42 +2,51 @@ package watcher
 
 import (
 	"context"
-	"sort"
+	"time"
 
+	"github.com/go-co-op/gocron"
 	"github.com/jm199seo/dhg_bot/pkg/discord"
 	"github.com/jm199seo/dhg_bot/pkg/loa_api"
+	"github.com/jm199seo/dhg_bot/pkg/mongo"
 	"github.com/jm199seo/dhg_bot/util/logger"
 )
 
 type Server struct {
 	la *loa_api.Client
 	dc *discord.Client
+	mg *mongo.Client
+
+	sch *gocron.Scheduler
 }
 
-func NewServer(cfg Config, la *loa_api.Client, dc *discord.Client) *Server {
+func NewServer(cfg Config, la *loa_api.Client, dc *discord.Client, mg *mongo.Client) (*Server, func(), error) {
+	cleanup := func() {
+	}
+
+	sch := gocron.NewScheduler(time.UTC)
+
 	return &Server{
-		la: la,
-		dc: dc,
-	}
+		la:  la,
+		dc:  dc,
+		mg:  mg,
+		sch: sch,
+	}, cleanup, nil
 }
 
-func (s *Server) StartWatcher() {
+func (s *Server) StartWatcher(pCtx context.Context) {
 	logger.Log.Debugln("start watcher")
-	cl, err := s.la.GetCharacterInfo(context.Background(), "호키헤어")
-	if err != nil {
-		logger.Log.Error(err)
-	}
-	sort.Slice(cl, func(i, j int) bool {
-		return cl[i].ItemMaxLevel > cl[j].ItemMaxLevel
-	})
-	for _, c := range cl {
-		logger.Log.Debugf("%s : %.2f", c.CharacterName, c.ItemMaxLevel)
-		// str := fmt.Sprintf("[%s]%s : %.2f", c.ServerName, c.CharacterName, c.ItemMaxLevel)
-		// s.dc.Publish(context.Background(), str)
-	}
 
-	// err = s.dc.Publish(context.Background(), "test message")
-	// if err != nil {
-	// 	logger.Log.Error(err)
-	// }
+	ctx := context.Background()
+	watchCharLevelJob, err := s.sch.Every(1).Minute().Do(s.WatchCharacterLevel, ctx)
+	if err != nil {
+		logger.Log.Panicln(err)
+	}
+	watchCharLevelJob.SingletonMode()
+	s.sch.StartAsync()
+
+	go func() {
+		<-pCtx.Done()
+		s.sch.Stop()
+		logger.Log.Debugf("stopped watcher")
+	}()
 }
