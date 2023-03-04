@@ -2,6 +2,7 @@ package discord
 
 import (
 	"fmt"
+	"math"
 	"strings"
 
 	"github.com/bwmarrin/discordgo"
@@ -38,11 +39,9 @@ var (
 			computePrice := [][]float64{
 				{sellPrice * 3 / 4, sellPrice * 7 / 8},
 				{sellPrice * 3 / 4 / 1.1, sellPrice * 7 / 8 / 1.1},
-				{sellPrice - (sellPrice * 3 / 4), sellPrice - (sellPrice * 7 / 8)},
-				{sellPrice / 4, sellPrice - (sellPrice / 8)},
+				// {sellPrice - (sellPrice * 3 / 4), sellPrice - (sellPrice * 7 / 8)},
+				// {sellPrice / 4, (sellPrice / 8)},
 			}
-			// price4 := []float64{sellPrice * 3 / 4, sellPrice * 3 / 4 / 1.1}
-			// price8 := []float64{sellPrice * 7 / 8, sellPrice * 7 / 8 / 1.1}
 			var price4 []string
 			var price8 []string
 
@@ -53,25 +52,23 @@ var (
 					prefix = "손익분기점"
 				case 1:
 					prefix = "선점입찰가"
-				case 2:
-					prefix = "수익금"
-				case 3:
-					prefix = "분배금"
+					// case 2:
+					// 	prefix = "수익금"
+					// case 3:
+					// 	prefix = "분배금"
 				}
-				price4 = append(price4, fmt.Sprintf("%s: %d G", prefix, int(p[0])))
-				price8 = append(price8, fmt.Sprintf("%s: %d G", prefix, int(p[1])))
+				price4 = append(price4, fmt.Sprintf("%s: %d G", prefix, int(math.Ceil(p[0]))))
+				price8 = append(price8, fmt.Sprintf("%s: %d G", prefix, int(math.Ceil(p[1]))))
 			}
 
 			fields := make([]*discordgo.MessageEmbedField, 0)
 
 			fields = append(fields, &discordgo.MessageEmbedField{
-				Name: "4인 레이드",
-				// Value:  "\u200B",
+				Name:   "4인 레이드",
 				Value:  strings.Join(price4, "\n"),
 				Inline: true,
 			}, &discordgo.MessageEmbedField{
-				Name: "8인 레이드",
-				// Value:  "\u200B",
+				Name:   "8인 레이드",
 				Value:  strings.Join(price8, "\n"),
 				Inline: true,
 			})
