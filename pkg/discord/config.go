@@ -7,6 +7,7 @@ var (
 		BotToken:            "",
 		WebhookURL:          "",
 		HokieWorldChannelID: "",
+		DalhaegaGuildID:     "",
 	}
 )
 
@@ -16,6 +17,7 @@ type Config struct {
 	BotToken            string `mapstructure:"bot_token"`
 	WebhookURL          string `mapstructure:"webhook_url"`
 	HokieWorldChannelID string `mapstructure:"hokie_world_channel_id"`
+	DalhaegaGuildID     string `mapstructure:"dalhaega_guild_id"`
 }
 
 // bot invite URL

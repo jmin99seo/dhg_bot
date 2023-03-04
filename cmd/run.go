@@ -14,9 +14,10 @@ import (
 
 var (
 	runDiscordBot = &cobra.Command{
-		Use:     "discord_bot",
-		Aliases: []string{"dc"},
-		Short:   "달해가 봇",
+		Use:       "discord_bot",
+		Aliases:   []string{"dc"},
+		Short:     "달해가 봇",
+		ValidArgs: []string{"debug"},
 		Run: func(cmd *cobra.Command, args []string) {
 			ctx, cancel := context.WithCancel(context.Background())
 			s, cleanup, err := watcher.InitializeWatcher(ctx, viper.GetViper())
@@ -28,7 +29,14 @@ var (
 				cancel()
 			}()
 
-			s.StartWatcher(ctx)
+			// get debug flag from args using cobra args
+			if debug, err := cmd.Flags().GetBool("debug"); err != nil {
+				logger.Log.Panicln(err)
+			} else if debug {
+				logger.Log.Infoln("debug mode")
+			} else {
+				s.StartWatcher(ctx)
+			}
 
 			sig := make(chan os.Signal, 1)
 			signals := []os.Signal{syscall.SIGTERM, os.Interrupt, syscall.SIGINT}
@@ -44,3 +52,7 @@ var (
 		},
 	}
 )
+
+func init() {
+	runDiscordBot.Flags().BoolP("debug", "d", false, "debug mode")
+}
