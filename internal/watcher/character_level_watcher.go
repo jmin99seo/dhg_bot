@@ -14,12 +14,14 @@ import (
 
 func (s *Server) WatchCharacterLevel(ctx context.Context) error {
 	logger.Log.Debugln("running character level watcher")
+
 	mc, err := s.mg.MainCharacters(ctx)
 	if err != nil {
 		logger.Log.Error(err)
 	}
 
-	var eg errgroup.Group
+	eg, ctx := errgroup.WithContext(ctx)
+	eg.SetLimit(10)
 
 	for _, c := range mc {
 		c := c
@@ -85,7 +87,6 @@ func (s *Server) WatchCharacterLevel(ctx context.Context) error {
 					logger.Log.Errorf("mongo: failed to save new sub characters for %s[%v]: %v", mainCharName, newChars, err)
 					return err
 				}
-				logger.Log.Infof("added character [%s]", newChars)
 			} else {
 				// updated characters w/ new level
 				for _, mongoChar := range sc {

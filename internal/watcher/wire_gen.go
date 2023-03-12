@@ -25,7 +25,10 @@ func InitializeWatcher(ctx context.Context, cfg *viper.Viper) (*Server, func(), 
 	if err != nil {
 		return nil, nil, err
 	}
-	client := loa_api.NewClient(loa_apiConfig)
+	client, err := loa_api.NewClient(loa_apiConfig)
+	if err != nil {
+		return nil, nil, err
+	}
 	discordConfig, err := discord.ProvideConfigFromEnvironment(cfg)
 	if err != nil {
 		return nil, nil, err

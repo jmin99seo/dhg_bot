@@ -39,7 +39,7 @@ func (s *Server) StartWatcher(pCtx context.Context) {
 	ctx := context.Background()
 	watchCharLevelJob, err := s.sch.Every(1).Minute().Do(s.WatchCharacterLevel, ctx)
 	if err != nil {
-		logger.Log.Panicln(err)
+		logger.Log.Errorf("watch char lvl error: %v", err)
 	}
 	watchCharLevelJob.SingletonMode()
 	s.sch.StartAsync()
