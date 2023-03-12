@@ -97,3 +97,18 @@ func (m *Client) UpdateChracter(ctx context.Context, char Character) error {
 	}
 	return nil
 }
+
+func (m *Client) DeleteCharacters(ctx context.Context, chars []Character) error {
+	db := m.client.Database(m.Config.DatabaseName)
+	coll := db.Collection(m.Config.CharactersCollection)
+
+	var ids []primitive.ObjectID
+	for _, char := range chars {
+		ids = append(ids, char.ID)
+	}
+	if _, err := coll.DeleteMany(ctx, bson.M{"_id": bson.M{"$in": ids}}); err != nil {
+		logger.Log.Errorf("failed to delete characters: %v", err)
+		return err
+	}
+	return nil
+}
