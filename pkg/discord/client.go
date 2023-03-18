@@ -44,6 +44,15 @@ func NewClient(cfg Config) (*Client, func(), error) {
 		}
 	})
 
+	client := &Client{
+		bot:    discord,
+		config: cfg,
+	}
+
+	discord.Identify.Intents |= discordgo.IntentsAll
+
+	client.registerHandlers()
+
 	cleanup := func() {
 		err := discord.Close()
 		if err != nil {
@@ -51,8 +60,10 @@ func NewClient(cfg Config) (*Client, func(), error) {
 		}
 	}
 
-	return &Client{
-		bot:    discord,
-		config: cfg,
-	}, cleanup, nil
+	return client, cleanup, nil
+}
+
+func (c *Client) registerHandlers() {
+	c.bot.AddHandler(messageForwarding(c.config.AdminUserID))
+	// c.bot.AddHandler(messageReply)
 }
