@@ -27,117 +27,116 @@ func (s *Server) WatchCharacterLevel(ctx context.Context) error {
 		c := c
 		eg.Go(func() error {
 			mainCharName := c.Name
-			cl, err := s.la.GetAllCharactersForCharacter(ctx, mainCharName)
+			apiCharacters, err := s.la.GetAllCharactersForCharacter(ctx, mainCharName)
 			if err != nil {
-				logger.Log.Errorf("loaAPI: failed to get all characters for %s: %v", mainCharName, err)
+				// logger.Log.Errorf("loaAPI: failed to get all characters for %s: %v", mainCharName, err)
 				return err
 			}
-			// 카단서버만 가져오기
-			var clKadan []loa_api.CharacterInfo
-			for _, c := range cl {
-				if c.ServerName == "카단" {
-					clKadan = append(clKadan, c)
-				}
+			if len(apiCharacters) == 0 {
+				return fmt.Errorf("no characters for %s", mainCharName)
 			}
 
-			sc, err := s.mg.SubCharactersForMainCharacter(ctx, mainCharName)
+			localCharacters, err := s.mg.SubCharactersForMainCharacter(ctx, mainCharName)
 			if err != nil {
 				logger.Log.Errorf("mongo: failed to get sub characters for %s: %v", mainCharName, err)
 				return err
 			}
 
-			// check if there are deleted characters
-			var deletedChars []mongo.Character
-			for _, mongoChar := range sc {
-				isDeleted := false
-				for _, apiChar := range clKadan {
-					if mongoChar.CharacterInfo.CharacterName == apiChar.CharacterName {
-						break
+			var (
+				newCharacters     []loa_api.CharacterInfo
+				updatedCharacters []loa_api.CharacterInfo
+				deletedCharacters []mongo.Character
+			)
+
+			for _, apiChar := range apiCharacters {
+				found := false
+				for _, localChar := range localCharacters {
+					if apiChar.CharacterName == localChar.CharacterInfo.CharacterName {
+						if localChar.CharacterInfo.ItemMaxLevel < apiChar.ItemMaxLevel {
+							updatedCharacters = append(updatedCharacters, apiChar)
+						}
+						found = true
 					}
-					isDeleted = true
 				}
-				if isDeleted {
-					deletedChars = append(deletedChars, mongoChar)
+				if !found {
+					newCharacters = append(newCharacters, apiChar)
 				}
-			}
-			if len(deletedChars) > 0 {
-				if err := s.mg.DeleteCharacters(ctx, deletedChars); err != nil {
-					logger.Log.Errorf("mongo: failed to delete characters: %v", err)
-				}
-				sc, _ = s.mg.SubCharactersForMainCharacter(ctx, mainCharName)
 			}
 
-			if len(clKadan) != len(sc) {
-				// new characters
-				var newChars []loa_api.CharacterInfo
-				for _, apiChar := range clKadan {
-					var found bool
-					for _, mongoChar := range sc {
-						if mongoChar.CharacterInfo.CharacterName == apiChar.CharacterName {
-							found = true
-							break
-						}
-					}
-					if !found {
-						newChars = append(newChars, apiChar)
+			// delete local characters that aren't retrieved from API
+			for _, localChar := range localCharacters {
+				found := false
+				for _, apiChar := range apiCharacters {
+					if apiChar.CharacterName == localChar.CharacterInfo.CharacterName {
+						found = true
 					}
 				}
-				err = s.mg.SaveSubCharacters(ctx, mainCharName, newChars)
+				if !found {
+					deletedCharacters = append(deletedCharacters, localChar)
+				}
+			}
+
+			if len(newCharacters) > 0 {
+				err = s.mg.SaveSubCharacters(ctx, mainCharName, newCharacters)
 				if err != nil {
-					logger.Log.Errorf("mongo: failed to save new sub characters for %s[%v]: %v", mainCharName, newChars, err)
+					logger.Log.Errorf("mongo: failed to save new sub characters for %s[%v]: %v", mainCharName, newCharacters, err)
 					return err
 				}
-			} else {
-				// updated characters w/ new level
-				for _, mongoChar := range sc {
-					for _, apiChar := range clKadan {
-						if mongoChar.CharacterInfo.CharacterName == apiChar.CharacterName {
-							if mongoChar.CharacterInfo.ItemMaxLevel < apiChar.ItemMaxLevel {
-								// update
-								// logger.Log.Debugf("updating character %s", apiChar.CharacterName)
-								oldLevel := mongoChar.CharacterInfo.ItemMaxLevel
-								char := mongoChar
-								if apiChar.CharacterLevel > char.CharacterInfo.CharacterLevel {
-									char.CharacterInfo.CharacterLevel = apiChar.CharacterLevel
-								}
-								char.CharacterInfo.ItemAvgLevel = apiChar.ItemAvgLevel
-								char.CharacterInfo.ItemMaxLevel = apiChar.ItemMaxLevel
-								err = s.mg.UpdateChracter(ctx, char)
-								if err != nil {
-									logger.Log.Errorf("mongo: failed to update sub character %s: %v", apiChar.CharacterName, err)
-									continue
-								}
-								logger.Log.Infof("updated character [%s] to level : %.2f", apiChar.CharacterName, apiChar.ItemMaxLevel)
+			}
 
-								imgURL := "https://iili.io/HI0U4pe.jpg"
-								// get character image
-								detailInfo, err := s.la.DetailedCharacterInfo(ctx, apiChar.CharacterName)
-								if err != nil {
-									logger.Log.Errorf("loaAPI: failed to get detailed character info for %s: %v", apiChar.CharacterName, err)
-								} else {
-									imgURL = detailInfo.CharacterImage
-								}
-
-								str := fmt.Sprintf("[%s]%s : %.2f에서 %.2f로 레벨업!", apiChar.ServerName, apiChar.CharacterName, oldLevel, apiChar.ItemMaxLevel)
-								s.dc.PublishComplex(ctx, "", discordgo.MessageEmbed{
-									Title:       fmt.Sprintf("%s 레벨업!", apiChar.CharacterName),
-									Description: str,
-									Timestamp:   time.Now().Format(time.RFC3339),
-									Type:        discordgo.EmbedTypeArticle,
-									Image: &discordgo.MessageEmbedImage{
-										URL:    imgURL,
-										Width:  100,
-										Height: 200,
-									},
-									Thumbnail: &discordgo.MessageEmbedThumbnail{
-										URL:    "https://iili.io/HI0U4pe.jpg",
-										Width:  100,
-										Height: 100,
-									},
-								})
-							}
+			if len(updatedCharacters) > 0 {
+				for _, uc := range updatedCharacters {
+					var prevChar mongo.Character
+					for _, lc := range localCharacters {
+						if lc.CharacterInfo.CharacterName == uc.CharacterName {
+							prevChar = lc
 							break
 						}
+					}
+					oldLevel := prevChar.CharacterInfo.ItemMaxLevel
+					prevChar.CharacterInfo = uc
+					updatedCharInfo := uc
+					err = s.mg.UpdateChracter(ctx, prevChar)
+					if err != nil {
+						logger.Log.Errorf("mongo: failed to update character %s: %v", uc.CharacterName, err)
+						return err
+					}
+					logger.Log.Infof("updated character [%s][%s] (%s) to level : %.2f", updatedCharInfo.ServerName, updatedCharInfo.CharacterName, updatedCharInfo.CharacterClassName, updatedCharInfo.ItemMaxLevel)
+					imgURL := "https://iili.io/HI0U4pe.jpg"
+					// get character image
+					detailInfo, err := s.la.DetailedCharacterInfo(ctx, updatedCharInfo.CharacterName)
+					if err != nil {
+						logger.Log.Errorf("loaAPI: failed to get detailed character info for %s: %v", updatedCharInfo.CharacterName, err)
+					} else {
+						imgURL = detailInfo.CharacterImage
+					}
+
+					str := fmt.Sprintf("[%s]%s : %.2f에서 %.2f로 레벨업!", updatedCharInfo.ServerName, updatedCharInfo.CharacterName, oldLevel, updatedCharInfo.ItemMaxLevel)
+					s.dc.PublishComplex(ctx, "", discordgo.MessageEmbed{
+						Title:       fmt.Sprintf("%s 레벨업!", updatedCharInfo.CharacterName),
+						Description: str,
+						Timestamp:   time.Now().Format(time.RFC3339),
+						Type:        discordgo.EmbedTypeArticle,
+						Image: &discordgo.MessageEmbedImage{
+							URL:    imgURL,
+							Width:  100,
+							Height: 200,
+						},
+						Thumbnail: &discordgo.MessageEmbedThumbnail{
+							URL:    "https://iili.io/HI0U4pe.jpg",
+							Width:  100,
+							Height: 100,
+						},
+					})
+				}
+			}
+
+			if len(deletedCharacters) > 0 {
+				if err := s.mg.DeleteCharacters(ctx, deletedCharacters); err != nil {
+					logger.Log.Errorf("mongo: failed to delete characters: %v", err)
+				} else {
+					for _, dc := range deletedCharacters {
+						logger.Log.Infof("deleted character from database [%s]", dc.CharacterInfo.CharacterName)
 					}
 				}
 			}
@@ -146,7 +145,7 @@ func (s *Server) WatchCharacterLevel(ctx context.Context) error {
 	}
 
 	if err := eg.Wait(); err != nil {
-		logger.Log.Error(err)
+		// logger.Log.Error(err)
 		return err
 	}
 

@@ -1,45 +1,48 @@
 package loa_api
 
-import "time"
+import (
+	"net/http"
+	"strconv"
+	"time"
 
-type APIKey struct {
-	Key       string
-	Limit     int64
-	Remaining int64
-	Reset     time.Time
+	"github.com/jm199seo/dhg_bot/util/logger"
+)
+
+type APIKeyRateLimitInfo struct {
+	rateRemaining int
+	rateReset     time.Time
+	retryAfter    time.Time
 }
 
-func selectAPIKey(apiKeys []*APIKey, excludeKey *APIKey) *APIKey {
-	var apiKey *APIKey
-	for _, k := range apiKeys {
-		if k == excludeKey {
-			continue // Skip excluded key
-		}
-		if k.Remaining > 0 {
-			apiKey = k
-			break
-		}
+func (c *Client) initKeyQueue() {
+	for _, key := range c.apiKeys {
+		c.availableKeys <- key
 	}
-	if apiKey == nil {
-		// all keys are exhausted, wait until the earliest reset time
-		earliestReset := apiKeys[0].Reset
-		for _, k := range apiKeys[1:] {
-			if k.Reset.Before(earliestReset) {
-				earliestReset = k.Reset
-			}
-		}
-		// sleep until the earliest reset time
-		time.Sleep(time.Until(earliestReset))
-		apiKey = apiKeys[0] // Use the first key
-	}
-	return apiKey
 }
 
-func findAPIKey(apiKeys []*APIKey, key string) *APIKey {
-	for _, k := range apiKeys {
-		if k.Key == key {
-			return k
-		}
+func (c *Client) returnAPIKey(apiKey string) {
+	c.availableKeys <- apiKey
+}
+
+func (c *Client) returnAPIKeyWhenAvailable(apiKey string) {
+	c.rateLimitInfoMu.RLock()
+	info := c.rateLimitInfo[apiKey]
+	c.rateLimitInfoMu.RUnlock()
+	logger.Log.Debugf("sleeping... until %s", info.rateReset)
+	time.Sleep(time.Until(info.rateReset))
+	c.returnAPIKey(apiKey)
+}
+
+func (c *Client) updateRateLimit(resp *http.Response, apiKey string) {
+	info := c.rateLimitInfo[apiKey]
+
+	remaining, err := strconv.Atoi(resp.Header.Get("X-RateLimit-Remaining"))
+	if err == nil {
+		info.rateRemaining = remaining
 	}
-	return nil
+
+	reset, err := strconv.ParseInt(resp.Header.Get("X-RateLimit-Reset"), 10, 64)
+	if err == nil {
+		info.rateReset = time.Unix(reset, 0)
+	}
 }
