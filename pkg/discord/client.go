@@ -3,6 +3,7 @@ package discord
 import (
 	"github.com/bwmarrin/discordgo"
 	"github.com/google/wire"
+	"github.com/jm199seo/dhg_bot/pkg/mongo"
 	"github.com/jm199seo/dhg_bot/util/logger"
 )
 
@@ -13,9 +14,11 @@ var (
 type Client struct {
 	bot    *discordgo.Session
 	config Config
+	mg     *mongo.Client
 }
 
-func NewClient(cfg Config) (*Client, func(), error) {
+func NewClient(cfg Config, mg *mongo.Client) (*Client, func(), error) {
+
 	discord, err := discordgo.New("Bot " + cfg.BotToken)
 	if err != nil {
 		logger.Log.Panic(err)
@@ -38,16 +41,17 @@ func NewClient(cfg Config) (*Client, func(), error) {
 		registeredCommands[i] = cmd
 	}
 
-	discord.AddHandler(func(s *discordgo.Session, i *discordgo.InteractionCreate) {
-		if h, ok := commandHandlers[i.ApplicationCommandData().Name]; ok {
-			h(s, i)
-		}
-	})
-
 	client := &Client{
 		bot:    discord,
 		config: cfg,
+		mg:     mg,
 	}
+
+	discord.AddHandler(func(s *discordgo.Session, i *discordgo.InteractionCreate) {
+		if h, ok := client.commandHandlers()[i.ApplicationCommandData().Name]; ok {
+			h(s, i)
+		}
+	})
 
 	discord.Identify.Intents |= discordgo.IntentsAll
 
@@ -57,6 +61,13 @@ func NewClient(cfg Config) (*Client, func(), error) {
 		err := discord.Close()
 		if err != nil {
 			logger.Log.Errorf("Error closing Discord session: %v", err)
+		}
+		// deregister application commands
+		for _, v := range registeredCommands {
+			err := discord.ApplicationCommandDelete(discord.State.User.ID, "", v.ID)
+			if err != nil {
+				logger.Log.Errorf("Cannot delete '%v' command: %v", v.Name, err)
+			}
 		}
 	}
 
