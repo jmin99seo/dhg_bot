@@ -41,8 +41,13 @@ func (s *Server) StartWatcher(pCtx context.Context) {
 	if err != nil {
 		logger.Log.Errorf("watch char lvl error: %v", err)
 	}
+	watchCharLevelJob.Tag("watchCharLevelJob")
 	watchCharLevelJob.SingletonMode()
 	s.sch.StartAsync()
+
+	gocron.SetPanicHandler(func(jobName string, data any) {
+		logger.Log.Errorf("panic in job %s: %v", jobName, data)
+	})
 
 	go func() {
 		<-pCtx.Done()

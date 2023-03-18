@@ -2,6 +2,7 @@ package loa_api
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 	"io"
 	"net/http"
@@ -31,7 +32,6 @@ func NewClient(cfg Config) (*Client, error) {
 	c.RetryWaitMax = 5 * time.Second
 	c.Backoff = retryablehttp.LinearJitterBackoff
 	c.Logger = nil
-
 	if len(cfg.APIKeys) == 0 {
 		return nil, fmt.Errorf("no api keys provided")
 	} else {
@@ -52,6 +52,10 @@ func NewClient(cfg Config) (*Client, error) {
 
 	stdClient := c.StandardClient()
 	stdClient.Timeout = 15 * time.Second
+	// lostark API SSL certificate is invalid. so we need to skip verification
+	customTransport := stdClient.Transport.(*retryablehttp.RoundTripper).Client.HTTPClient.Transport.(*http.Transport).Clone()
+	customTransport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
+	stdClient.Transport = customTransport
 
 	return &Client{
 		client:  stdClient,
@@ -108,8 +112,13 @@ func updateAPIMetadata(apiKey *APIKey, resp *http.Response) {
 	}
 }
 
-func retryPolicy(apiKeys []*APIKey) func(context.Context, *http.Response, error) (bool, error) {
+func retryPolicy(apiKeys []*APIKey) retryablehttp.CheckRetry {
 	return func(ctx context.Context, resp *http.Response, err error) (bool, error) {
+		if shouldRetry, err := retryablehttp.DefaultRetryPolicy(ctx, resp, err); err != nil || resp == nil {
+			return shouldRetry, err
+		}
+
+		// defaultretry policy returns true w/ err nil if status code is 429
 		if resp.StatusCode == http.StatusTooManyRequests {
 			// Extract bearer token from request header
 			bearerToken := strings.TrimPrefix(resp.Request.Header.Get("Authorization"), "Bearer ")
