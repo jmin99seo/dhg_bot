@@ -12,8 +12,8 @@ import (
 )
 
 type MainCharacters struct {
-	ID   primitive.ObjectID `bson:"_id"`
-	Name string             `bson:"name"`
+	ID   primitive.ObjectID `bson:"_id" json:"_id,omitempty"`
+	Name string             `bson:"name" json:"name"`
 }
 
 func (m *Client) MainCharacters(ctx context.Context) ([]MainCharacters, error) {

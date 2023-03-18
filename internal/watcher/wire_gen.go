@@ -33,16 +33,15 @@ func InitializeWatcher(ctx context.Context, cfg *viper.Viper) (*Server, func(), 
 	if err != nil {
 		return nil, nil, err
 	}
-	discordClient, cleanup, err := discord.NewClient(discordConfig)
-	if err != nil {
-		return nil, nil, err
-	}
 	mongoConfig, err := mongo.ProvideConfigFromEnvironment(cfg)
 	if err != nil {
-		cleanup()
 		return nil, nil, err
 	}
-	mongoClient, cleanup2, err := mongo.NewClient(mongoConfig)
+	mongoClient, cleanup, err := mongo.NewClient(mongoConfig)
+	if err != nil {
+		return nil, nil, err
+	}
+	discordClient, cleanup2, err := discord.NewClient(discordConfig, mongoClient)
 	if err != nil {
 		cleanup()
 		return nil, nil, err
