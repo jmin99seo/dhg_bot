@@ -50,7 +50,7 @@ func (c *CharacterInfo) UnmarshalJSON(b []byte) error {
 }
 
 func (c *Client) GetAllCharactersForCharacter(ctx context.Context, name string) ([]CharacterInfo, error) {
-	res, err := c.Get(fmt.Sprintf("characters/%s/siblings", url.QueryEscape(name)))
+	res, err := c.Get(ctx, fmt.Sprintf("characters/%s/siblings", url.QueryEscape(name)))
 	if err != nil {
 		return nil, err
 	}
@@ -93,7 +93,7 @@ type DetailedCharacterInfo struct {
 
 func (c *Client) DetailedCharacterInfo(ctx context.Context, name string) (DetailedCharacterInfo, error) {
 	var dci DetailedCharacterInfo
-	res, err := c.Get(fmt.Sprintf("armories/characters/%s/profiles", url.QueryEscape(name)))
+	res, err := c.Get(ctx, fmt.Sprintf("armories/characters/%s/profiles", url.QueryEscape(name)))
 	if err != nil {
 		return dci, err
 	}

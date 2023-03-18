@@ -29,11 +29,10 @@ func (s *Server) WatchCharacterLevel(ctx context.Context) error {
 			mainCharName := c.Name
 			apiCharacters, err := s.la.GetAllCharactersForCharacter(ctx, mainCharName)
 			if err != nil {
-				logger.Log.Errorf("loaAPI: failed to get all characters for %s: %v", mainCharName, err)
+				// logger.Log.Errorf("loaAPI: failed to get all characters for %s: %v", mainCharName, err)
 				return err
 			}
 			if len(apiCharacters) == 0 {
-				logger.Log.Errorf("loaAPI: no characters for %s", mainCharName)
 				return fmt.Errorf("no characters for %s", mainCharName)
 			}
 
@@ -146,7 +145,7 @@ func (s *Server) WatchCharacterLevel(ctx context.Context) error {
 	}
 
 	if err := eg.Wait(); err != nil {
-		logger.Log.Error(err)
+		// logger.Log.Error(err)
 		return err
 	}
 
