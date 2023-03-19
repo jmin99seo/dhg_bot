@@ -4,10 +4,14 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/bwmarrin/discordgo"
+	"github.com/jm199seo/dhg_bot/pkg/loa_api"
 	"github.com/jm199seo/dhg_bot/util/logger"
+	"golang.org/x/exp/slices"
 )
 
 var (
@@ -28,6 +32,18 @@ var (
 			Name:        "유저목록",
 			Description: "등록된 유저 목록",
 		},
+		{
+			Name:        "길드검색",
+			Description: "원정대캐릭터가 속한 길드 검색",
+			Options: []*discordgo.ApplicationCommandOption{
+				{
+					Type:        discordgo.ApplicationCommandOptionString,
+					Name:        "캐릭터명",
+					Description: "검색할 캐릭터명",
+					Required:    true,
+				},
+			},
+		},
 	}
 )
 
@@ -35,6 +51,7 @@ func (c *Client) commandHandlers() map[string]func(*discordgo.Session, *discordg
 	return map[string]func(s *discordgo.Session, i *discordgo.InteractionCreate){
 		"경매":   priceCommand,
 		"유저목록": c.userListCommand,
+		"길드검색": c.guildSearchCommand,
 	}
 }
 
@@ -123,19 +140,95 @@ func priceCommand(s *discordgo.Session, i *discordgo.InteractionCreate) {
 		Inline: true,
 	})
 
-	// 	// sb.WriteString(fmt.Sprintf("%s: %8.2d G %s: %8.2d G\n", prefix, int(p[0]), prefix, int(p[1])))
-	// }
-
 	s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseChannelMessageWithSource,
 		Data: &discordgo.InteractionResponseData{
 			Embeds: []*discordgo.MessageEmbed{
 				{
-					Title: fmt.Sprintf("경매 입찰기 (%v G)", price),
-					// Description: sb.String(),
+					Title:  fmt.Sprintf("경매 입찰기 (%v G)", price),
 					Fields: fields,
 				},
 			},
 		},
 	})
+}
+
+func (c *Client) guildSearchCommand(s *discordgo.Session, i *discordgo.InteractionCreate) {
+	ctx := context.Background()
+	options := i.ApplicationCommandData().Options
+	val := options[0].Value
+	charName, ok := val.(string)
+	if !ok {
+		logger.Log.Error("Cannot convert charName to string")
+		return
+	}
+	charList, err := c.la.GetAllCharactersForCharacter(ctx, charName)
+	if err != nil {
+		logger.Log.Error(err)
+		return
+	}
+
+	fields := make([]*discordgo.MessageEmbedField, 0)
+	resultChan := make(chan loa_api.DetailedCharacterInfo, len(charList))
+	subChars := make([]loa_api.DetailedCharacterInfo, 0)
+	wg := sync.WaitGroup{}
+
+	for _, char := range charList {
+		wg.Add(1)
+		go func(char loa_api.CharacterInfo) {
+			defer wg.Done()
+			detailedChar, err := c.la.DetailedCharacterInfo(ctx, char.CharacterName)
+			if err != nil {
+				logger.Log.Error(err)
+				return
+			}
+			resultChan <- detailedChar
+		}(char)
+	}
+
+	go func() {
+		wg.Wait()
+		close(resultChan)
+	}()
+
+	for result := range resultChan {
+		subChars = append(subChars, result)
+	}
+
+	slices.SortFunc(subChars, func(i, j loa_api.DetailedCharacterInfo) bool {
+		iNoComma := strings.ReplaceAll(i.ItemMaxLevel, ",", "")
+		jNoComma := strings.ReplaceAll(j.ItemMaxLevel, ",", "")
+
+		iMaxLevel, _ := strconv.ParseFloat(iNoComma, 64)
+		jMaxLevel, _ := strconv.ParseFloat(jNoComma, 64)
+		return iMaxLevel > jMaxLevel
+	})
+
+	for _, result := range subChars {
+		guildName := result.GuildName
+		if guildName == "" {
+			guildName = "**길드 없음"
+		} else {
+			guildName = fmt.Sprintf("%s (%s)", guildName, result.GuildMemberGrade)
+		}
+		fields = append(fields, &discordgo.MessageEmbedField{
+			Name:  fmt.Sprintf("[%s] - %s (%s %s)", result.ServerName, result.CharacterName, result.ItemMaxLevel, result.CharacterClassName),
+			Value: guildName,
+		})
+	}
+
+	if err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+		Type: discordgo.InteractionResponseChannelMessageWithSource,
+		Data: &discordgo.InteractionResponseData{
+			Embeds: []*discordgo.MessageEmbed{
+				{
+					Title:  fmt.Sprintf("%s의 원정대 길드현황", charName),
+					Fields: fields,
+				},
+			},
+			Flags: discordgo.MessageFlagsEphemeral,
+		},
+	}); err != nil {
+		logger.Log.Error(err)
+	}
 }
