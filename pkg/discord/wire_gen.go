@@ -8,6 +8,7 @@ package discord
 
 import (
 	"context"
+	"github.com/jm199seo/dhg_bot/pkg/loa_api"
 	"github.com/jm199seo/dhg_bot/pkg/mongo"
 	"github.com/spf13/viper"
 )
@@ -27,7 +28,17 @@ func InitializeDiscord(ctx context.Context, cfg *viper.Viper) (*Client, func(), 
 	if err != nil {
 		return nil, nil, err
 	}
-	discordClient, cleanup2, err := NewClient(config, client)
+	loa_apiConfig, err := loa_api.ProvideConfigFromEnvironment(cfg)
+	if err != nil {
+		cleanup()
+		return nil, nil, err
+	}
+	loa_apiClient, err := loa_api.NewClient(loa_apiConfig)
+	if err != nil {
+		cleanup()
+		return nil, nil, err
+	}
+	discordClient, cleanup2, err := NewClient(config, client, loa_apiClient)
 	if err != nil {
 		cleanup()
 		return nil, nil, err
