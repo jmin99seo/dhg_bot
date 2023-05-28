@@ -1,6 +1,6 @@
 module github.com/jm199seo/dhg_bot
 
-go 1.19
+go 1.20
 
 require (
 	github.com/bwmarrin/discordgo v0.26.1
