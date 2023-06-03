@@ -4,14 +4,18 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"net/url"
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/bwmarrin/discordgo"
+	"github.com/jm199seo/dhg_bot/pkg/colly"
 	"github.com/jm199seo/dhg_bot/pkg/loa_api"
 	"github.com/jm199seo/dhg_bot/util/logger"
 	"golang.org/x/exp/slices"
+	"golang.org/x/sync/errgroup"
 )
 
 var (
@@ -44,6 +48,24 @@ var (
 				},
 			},
 		},
+		{
+			Name:        "사사게",
+			Description: "원하는 키워드로 사사게 검색",
+			Options: []*discordgo.ApplicationCommandOption{
+				{
+					Type:        discordgo.ApplicationCommandOptionString,
+					Name:        "키워드",
+					Description: "검색할 키워드",
+					Required:    true,
+				},
+				{
+					Type:        discordgo.ApplicationCommandOptionBoolean,
+					Name:        "원정대검색",
+					Description: "키워드에 해당하는 캐릭터명의 원정대 전체 검색",
+					Required:    false,
+				},
+			},
+		},
 	}
 )
 
@@ -52,6 +74,7 @@ func (c *Client) commandHandlers() map[string]func(*discordgo.Session, *discordg
 		"경매":   priceCommand,
 		"유저목록": c.userListCommand,
 		"길드검색": c.guildSearchCommand,
+		"사사게":  c.sasageSearchCommand,
 	}
 }
 
@@ -231,4 +254,124 @@ func (c *Client) guildSearchCommand(s *discordgo.Session, i *discordgo.Interacti
 	}); err != nil {
 		logger.Log.Error(err)
 	}
+}
+
+func (c *Client) sasageSearchCommand(s *discordgo.Session, i *discordgo.InteractionCreate) {
+	ctx := context.Background()
+	options := i.ApplicationCommandData().Options
+	searchKeyword := options[0].StringValue()
+	var isBatchSearch bool
+	if len(options) > 1 {
+		isBatchSearch = options[1].BoolValue()
+	}
+
+	if err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+		Type: discordgo.InteractionResponseDeferredChannelMessageWithSource,
+	}); err != nil {
+		logger.Log.Error(err)
+	}
+
+	var searchKeywords []string
+
+	if isBatchSearch {
+		chars, err := c.la.GetAllCharactersForCharacter(ctx, searchKeyword)
+		if err != nil || len(chars) == 0 {
+			logger.Log.Error(err)
+
+			if _, err := s.InteractionResponseEdit(i.Interaction, &discordgo.WebhookEdit{
+				Content: strPtr(fmt.Sprintf("캐릭터명 **%s**에 대한 검색 결과가 없습니다.", searchKeyword)),
+			}); err != nil {
+				logger.Log.Error(err)
+				return
+			}
+			return
+		}
+		for _, char := range chars {
+			searchKeywords = append(searchKeywords, char.CharacterName)
+		}
+	} else {
+		searchKeywords = append(searchKeywords, searchKeyword)
+	}
+
+	var sasageResult []*colly.InvenIncidentResult
+	var sasageResultLock sync.Mutex
+
+	now := time.Now()
+	eg, egCtx := errgroup.WithContext(ctx)
+	for _, keyword := range searchKeywords {
+		keyword := keyword
+		eg.Go(func() error {
+			sr, err := c.collyClient.SearchInvenIncidents(egCtx, keyword)
+			if err != nil {
+				return err
+			}
+			sasageResultLock.Lock()
+			sasageResult = append(sasageResult, sr...)
+			sasageResultLock.Unlock()
+			return nil
+		})
+	}
+
+	if err := eg.Wait(); err != nil {
+		logger.Log.Error(err)
+		if _, err := s.InteractionResponseEdit(i.Interaction, &discordgo.WebhookEdit{
+			Content: strPtr("사사게 검색중 오류가 발생했습니다"),
+		}); err != nil {
+			logger.Log.Error(err)
+			return
+		}
+		return
+	}
+	processTime := time.Since(now)
+
+	// filter out duplicated result
+	uniqueResult := make([]*colly.InvenIncidentResult, 0)
+	uniqueResultMap := make(map[string]struct{})
+	for _, result := range sasageResult {
+		keyURL, _ := url.Parse(result.PostURL)
+		if _, ok := uniqueResultMap[keyURL.Path]; !ok {
+			uniqueResultMap[keyURL.Path] = struct{}{}
+			uniqueResult = append(uniqueResult, result)
+		}
+	}
+	sasageResult = uniqueResult
+
+	keywordAll := strings.Join(searchKeywords, ", ")
+
+	var builder strings.Builder
+	builder.Grow(2000)
+	builder.WriteString(fmt.Sprintf("[**%s**] 검색 결과 %d건 (%.2fs)\n", keywordAll, len(sasageResult), processTime.Seconds()))
+
+	for _, result := range sasageResult {
+		if builder.Len() > 2000 {
+			break
+		}
+		hasImageStr := "없음"
+		if result.HasImage {
+			hasImageStr = "있음"
+		}
+		builder.WriteString("\n")
+		builder.WriteString(fmt.Sprintf("[%s]게시판 - [%s](%s)", result.Server, result.Title, result.PostURL))
+		builder.WriteString("\n")
+		builder.WriteString(fmt.Sprintf("📅 %s | 👀 %d | ✏️ %d | 👍 %d | 📷 %s | 📝 %s", result.DateStr, result.ViewCount, result.CommentCount, result.LikeCount, hasImageStr, result.Author))
+		builder.WriteString("\n")
+		builder.WriteString("----------------------------------------")
+	}
+
+	// slice to 2000
+	responseContent := builder.String()
+	if builder.Len() > 2000 {
+		responseContent = responseContent[:2000]
+	}
+
+	if _, err := s.InteractionResponseEdit(i.Interaction, &discordgo.WebhookEdit{
+		Content: strPtr(responseContent),
+	}); err != nil {
+		logger.Log.Error(err)
+		return
+	}
+}
+
+func strPtr(s string) *string {
+	return &s
 }

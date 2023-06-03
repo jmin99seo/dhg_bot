@@ -3,6 +3,7 @@ package discord
 import (
 	"github.com/bwmarrin/discordgo"
 	"github.com/google/wire"
+	"github.com/jm199seo/dhg_bot/pkg/colly"
 	"github.com/jm199seo/dhg_bot/pkg/loa_api"
 	"github.com/jm199seo/dhg_bot/pkg/mongo"
 	"github.com/jm199seo/dhg_bot/util/logger"
@@ -13,13 +14,14 @@ var (
 )
 
 type Client struct {
-	bot    *discordgo.Session
-	config Config
-	mg     *mongo.Client
-	la     *loa_api.Client
+	bot         *discordgo.Session
+	config      Config
+	mg          *mongo.Client
+	la          *loa_api.Client
+	collyClient *colly.Client
 }
 
-func NewClient(cfg Config, mg *mongo.Client, la *loa_api.Client) (*Client, func(), error) {
+func NewClient(cfg Config, mg *mongo.Client, la *loa_api.Client, collyClient *colly.Client) (*Client, func(), error) {
 
 	discord, err := discordgo.New("Bot " + cfg.BotToken)
 	if err != nil {
@@ -44,10 +46,11 @@ func NewClient(cfg Config, mg *mongo.Client, la *loa_api.Client) (*Client, func(
 	}
 
 	client := &Client{
-		bot:    discord,
-		config: cfg,
-		mg:     mg,
-		la:     la,
+		bot:         discord,
+		config:      cfg,
+		mg:          mg,
+		la:          la,
+		collyClient: collyClient,
 	}
 
 	discord.AddHandler(func(s *discordgo.Session, i *discordgo.InteractionCreate) {

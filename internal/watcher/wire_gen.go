@@ -8,6 +8,7 @@ package watcher
 
 import (
 	"context"
+	"github.com/jm199seo/dhg_bot/pkg/colly"
 	"github.com/jm199seo/dhg_bot/pkg/discord"
 	"github.com/jm199seo/dhg_bot/pkg/loa_api"
 	"github.com/jm199seo/dhg_bot/pkg/mongo"
@@ -41,18 +42,31 @@ func InitializeWatcher(ctx context.Context, cfg *viper.Viper) (*Server, func(), 
 	if err != nil {
 		return nil, nil, err
 	}
-	discordClient, cleanup2, err := discord.NewClient(discordConfig, mongoClient, client)
+	collyConfig, err := colly.ProvideConfigFromEnvironment(cfg)
 	if err != nil {
 		cleanup()
 		return nil, nil, err
 	}
-	server, cleanup3, err := NewServer(config, client, discordClient, mongoClient)
+	collyClient, cleanup2, err := colly.NewClient(ctx, collyConfig)
+	if err != nil {
+		cleanup()
+		return nil, nil, err
+	}
+	discordClient, cleanup3, err := discord.NewClient(discordConfig, mongoClient, client, collyClient)
 	if err != nil {
 		cleanup2()
 		cleanup()
 		return nil, nil, err
 	}
+	server, cleanup4, err := NewServer(config, client, discordClient, mongoClient)
+	if err != nil {
+		cleanup3()
+		cleanup2()
+		cleanup()
+		return nil, nil, err
+	}
 	return server, func() {
+		cleanup4()
 		cleanup3()
 		cleanup2()
 		cleanup()

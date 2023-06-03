@@ -7,6 +7,7 @@ import (
 	"context"
 
 	"github.com/google/wire"
+	"github.com/jm199seo/dhg_bot/pkg/colly"
 	"github.com/jm199seo/dhg_bot/pkg/discord"
 	"github.com/jm199seo/dhg_bot/pkg/loa_api"
 	"github.com/jm199seo/dhg_bot/pkg/mongo"
@@ -14,5 +15,5 @@ import (
 )
 
 func InitializeWatcher(ctx context.Context, cfg *viper.Viper) (*Server, func(), error) {
-	panic(wire.Build(WatcherProviderSet, loa_api.LoaApiProviderSet, discord.DiscordProviderSet, mongo.MongoProviderSet))
+	panic(wire.Build(WatcherProviderSet, loa_api.LoaApiProviderSet, discord.DiscordProviderSet, mongo.MongoProviderSet, colly.CollyProviderSet))
 }
