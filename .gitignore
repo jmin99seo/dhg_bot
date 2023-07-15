@@ -1,4 +1,8 @@
-.vscode/*
-.air.*
-tmp/*
+.vscode
+
 config.yml
+.air*
+__debug_bin
+
+tmp/*
+
