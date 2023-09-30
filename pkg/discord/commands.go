@@ -18,6 +18,10 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
+const (
+	BAD_BARD_ID = "524529097884565513"
+)
+
 var (
 	commands = []*discordgo.ApplicationCommand{
 		{
@@ -66,6 +70,11 @@ var (
 				},
 			},
 		},
+		{
+			Name:        "분배",
+			Description: "버스 경매 분배 계산기",
+			Type:        discordgo.ChatApplicationCommand,
+		},
 	}
 )
 
@@ -75,6 +84,7 @@ func (c *Client) commandHandlers() map[string]func(*discordgo.Session, *discordg
 		"유저목록": c.userListCommand,
 		"길드검색": c.guildSearchCommand,
 		"사사게":  c.sasageSearchCommand,
+		"분배":   c.busAuctionCommand,
 	}
 }
 
@@ -372,6 +382,61 @@ func (c *Client) sasageSearchCommand(s *discordgo.Session, i *discordgo.Interact
 	}
 }
 
-func strPtr(s string) *string {
-	return &s
+type BusActionComponent string
+
+const (
+	BusActionComponentBook   = BusActionComponent("book")
+	BusActionComponentPeople = BusActionComponent("people")
+)
+
+func (ba BusActionComponent) String() string {
+	return string(ba)
+}
+
+func (c *Client) busAuctionCommand(s *discordgo.Session, i *discordgo.InteractionCreate) {
+	// ctx := context.Background()
+
+	logger.Log.Debug("busAuctionCommand")
+
+	// 버스차액 (독 - 미참) +  n(전각 가격) * 0.95 - 50(* 아이템 갯수) / 4 (사람수)
+	err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+		Type: discordgo.InteractionResponseModal,
+		Data: &discordgo.InteractionResponseData{
+			CustomID: fmt.Sprintf("bus_action_%s", i.Interaction.Member.User.ID),
+			Title:    "버스 경매 계산기",
+			Components: []discordgo.MessageComponent{
+				discordgo.ActionsRow{
+					Components: []discordgo.MessageComponent{
+						discordgo.TextInput{
+							CustomID:    BusActionComponentBook.String(),
+							Label:       "전설 각인서 가격",
+							Style:       discordgo.TextInputShort,
+							Placeholder: "전설 각인서 가격을 입력해주세요",
+							Required:    true,
+							MaxLength:   50,
+							MinLength:   1,
+						},
+					},
+				},
+				discordgo.ActionsRow{
+					Components: []discordgo.MessageComponent{
+						discordgo.TextInput{
+							CustomID:    BusActionComponentPeople.String(),
+							Label:       "인원 수",
+							Style:       discordgo.TextInputShort,
+							Placeholder: "인원 수를 입력해주세요",
+							Required:    false,
+						},
+					},
+				},
+			},
+		},
+	})
+	if err != nil {
+		logger.Log.Error(err)
+	}
+}
+
+func isBusActionType(customID string) bool {
+	return strings.HasPrefix(customID, "bus_action_")
 }

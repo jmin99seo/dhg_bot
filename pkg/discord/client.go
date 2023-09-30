@@ -54,6 +54,10 @@ func NewClient(cfg Config, mg *mongo.Client, la *loa_api.Client, collyClient *co
 	}
 
 	discord.AddHandler(func(s *discordgo.Session, i *discordgo.InteractionCreate) {
+		// only handle application commands
+		if i.Type != discordgo.InteractionApplicationCommand {
+			return
+		}
 		if h, ok := client.commandHandlers()[i.ApplicationCommandData().Name]; ok {
 			h(s, i)
 		}
@@ -62,6 +66,10 @@ func NewClient(cfg Config, mg *mongo.Client, la *loa_api.Client, collyClient *co
 	discord.Identify.Intents |= discordgo.IntentsAll
 
 	client.registerHandlers()
+	// _ = client.registerHandlers()
+	// for _, h := range handlers {
+	// 	registeredCommands = append(registeredCommands, h)
+	// }
 
 	cleanup := func() {
 		err := discord.Close()
@@ -80,7 +88,18 @@ func NewClient(cfg Config, mg *mongo.Client, la *loa_api.Client, collyClient *co
 	return client, cleanup, nil
 }
 
+// func (c *Client) registerHandlers() []*discordgo.ApplicationCommand {
 func (c *Client) registerHandlers() {
-	c.bot.AddHandler(messageForwarding(c.config.AdminUserID))
-	// c.bot.AddHandler(messageReply)
+	// var appCmds []*discordgo.ApplicationCommand
+	appCmds := []any{
+		messageForwarding(c.config.AdminUserID),
+		// messageReply,
+		busAuctionHandler,
+	}
+
+	for _, cmd := range appCmds {
+		c.bot.AddHandler(cmd)
+	}
+
+	// return appCmds
 }
