@@ -336,7 +336,11 @@ func (c *Client) sasageSearchCommand(s *discordgo.Session, i *discordgo.Interact
 	}
 	sasageResult = uniqueResult
 
-	keywordAll := strings.Join(searchKeywords, ", ")
+	// keywordAll := strings.Join(searchKeywords, ", ")
+	keywordAll := searchKeyword
+	if len(searchKeywords) > 1 {
+		keywordAll = fmt.Sprintf("%s외 %d개 캐릭터 ", searchKeyword, len(searchKeywords)-1)
+	}
 
 	var builder strings.Builder
 	builder.Grow(2000)

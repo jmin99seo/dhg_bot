@@ -7,6 +7,11 @@ import (
 	"github.com/gocolly/colly/v2"
 )
 
+func initCollector() Client {
+	cli, _, _ := NewClient(context.Background(), DefaultConfig)
+	return cli
+}
+
 func TestClient_SearchInvenIncidents(t *testing.T) {
 	type fields struct {
 		collector *colly.Collector
@@ -38,9 +43,7 @@ func TestClient_SearchInvenIncidents(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			c := &Client{
-				collector: tt.fields.collector,
-			}
+			c := client{}
 			res, err := c.SearchInvenIncidents(tt.args.ctx, tt.args.keyword)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("Client.SearchInvenIncidents() error = %v, wantErr %v", err, tt.wantErr)
@@ -52,6 +55,47 @@ func TestClient_SearchInvenIncidents(t *testing.T) {
 			}
 			// if got != tt.want {
 			// 	t.Errorf("Client.SearchInvenIncidents() = %v, want %v", got, tt.want)
+			// }
+		})
+	}
+}
+
+func Test_client_SearchInvenArticles(t *testing.T) {
+	cli := initCollector()
+
+	type args struct {
+		ctx     context.Context
+		keyword string
+	}
+	tests := []struct {
+		name    string
+		args    args
+		want    any
+		wantErr bool
+	}{
+		{
+			name: "test combined",
+			args: args{
+				ctx:     context.Background(),
+				keyword: "숙코",
+			},
+			wantErr: false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := cli.SearchInvenArticles(tt.args.ctx, tt.args.keyword)
+			t.Logf("%+v", got)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("client.SearchInvenArticles() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			// if (err != nil) != tt.wantErr {
+			// 	t.Errorf("client.SearchInvenArticles() error = %v, wantErr %v", err, tt.wantErr)
+			// 	return
+			// }
+			// if !reflect.DeepEqual(got, tt.want) {
+			// 	t.Errorf("client.SearchInvenArticles() = %v, want %v", got, tt.want)
 			// }
 		})
 	}

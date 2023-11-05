@@ -11,18 +11,38 @@ var (
 	CollyProviderSet = wire.NewSet(NewClient, ProvideConfigFromEnvironment)
 )
 
-type Client struct {
-	collector *colly.Collector
+type Client interface {
+	StartCollector(...colly.CollectorOption) *colly.Collector
+
+	SearchInvenIncidents(ctx context.Context, keyword string) ([]*InvenIncidentResult, error)
+	SearchInvenArticles(ctx context.Context, keyword string) ([]*InvenIncidentResult, error)
 }
 
-func NewClient(ctx context.Context, cfg Config) (*Client, func(), error) {
-	c := colly.NewCollector(colly.Async(true))
+type client struct {
+	cfg Config
+}
 
-	client := &Client{
-		collector: c,
+var (
+	_ Client = (*client)(nil)
+)
+
+func NewClient(ctx context.Context, cfg Config) (Client, func(), error) {
+	cli := &client{
+		cfg: cfg,
 	}
-
 	cleanup := func() {}
 
-	return client, cleanup, nil
+	return cli, cleanup, nil
+}
+
+func (c *client) StartCollector(opts ...colly.CollectorOption) *colly.Collector {
+	defaultOpts := []colly.CollectorOption{
+		colly.Async(true),
+	}
+	if opts != nil {
+		opts = append(defaultOpts, opts...)
+		return colly.NewCollector(opts...)
+	}
+
+	return colly.NewCollector(defaultOpts...)
 }

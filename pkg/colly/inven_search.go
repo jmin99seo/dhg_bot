@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/url"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -35,12 +36,14 @@ func removeServerFromTitle(title, server string) string {
 	return t
 }
 
-func (c *Client) SearchInvenIncidents(ctx context.Context, keyword string) ([]*InvenIncidentResult, error) {
+func (c *client) SearchInvenIncidents(ctx context.Context, keyword string) ([]*InvenIncidentResult, error) {
 	url := fmt.Sprintf("https://www.inven.co.kr/board/lostark/5355?query=list&sterm=&name=subjcont&keyword=%s", url.PathEscape(keyword))
 
 	var results []*InvenIncidentResult
 
-	c.collector.OnHTML("#new-board > form > div > table > tbody", func(e *colly.HTMLElement) {
+	collector := c.StartCollector()
+
+	collector.OnHTML("#new-board > form > div > table > tbody", func(e *colly.HTMLElement) {
 		children := e.DOM.ChildrenFiltered(":not(.notice)")
 		children.Each(func(i int, s *goquery.Selection) {
 			postURL, found := s.Find("td.tit a.subject-link").Attr("href")
@@ -93,9 +96,118 @@ func (c *Client) SearchInvenIncidents(ctx context.Context, keyword string) ([]*I
 		})
 	})
 
-	c.collector.Visit(url)
+	collector.Visit(url)
 
-	c.collector.Wait()
+	collector.Wait()
 
 	return results, nil
+}
+
+const (
+	BoardNameSasagae = "로스트아크 인벤 서버 사건/사고 게시판"
+)
+
+func (c *client) SearchInvenArticles(ctx context.Context, keyword string) ([]*InvenIncidentResult, error) {
+	var (
+		maxResults = 50
+		maxPages   = 10
+	)
+
+	collOpts := []colly.CollectorOption{
+		colly.MaxDepth(1),
+	}
+	collector := c.StartCollector(collOpts...)
+
+	var results []*InvenIncidentResult
+
+	collector.OnHTML("div.section_box,noboard", func(e *colly.HTMLElement) {
+		// detect if children has "ul.noresult"
+		if e.DOM.Find("ul.noresult").Length() > 0 {
+			fmt.Println("noresult")
+			return
+		}
+
+		e.DOM.Find("ul.news_list > li.item").Each(func(_ int, el *goquery.Selection) {
+			if el.Find("div.item_info > a.board").Text() == BoardNameSasagae {
+				// do something with the element
+				// return caption
+				link := el.Find("h1 > a.name").AttrOr("href", "")
+				// fmt.Println(link)
+				collector.Visit(link)
+			}
+		})
+	})
+
+	// actual article
+	collector.OnHTML("div#tbArticle", func(e *colly.HTMLElement) {
+		if len(results) >= maxResults {
+			return
+		}
+
+		title := e.DOM.Find("div.articleSubject h1").Text()
+		dateStr := e.DOM.Find("div.articleDate").Text()
+		postURL := e.Request.URL.String()
+		server := e.DOM.Find("div.articleHeadMenu div.articleCategory").Text()
+		server = strings.TrimSpace(server)
+		server = strings.Trim(server, "[]")
+		authorUnicode := e.DOM.Find("div.articleWriter span").Text()
+		author, err := strconv.Unquote(`"` + authorUnicode + `"`)
+		if err != nil {
+			author = authorUnicode
+		}
+
+		// not a node
+		var viewCount int
+		hit := e.DOM.Find("div.articleHit").Contents()
+		viewCountStr := hit.Text()
+		viewCountStr = strings.TrimSpace(viewCountStr)
+		viewCountStr = strings.TrimPrefix(viewCountStr, "조회: ")
+		re := regexp.MustCompile(`(\d{1,3}(,\d{3})*)(\t|\s)*`)
+		match := re.FindStringSubmatch(viewCountStr)
+		if len(match) > 1 {
+			nStr := strings.ReplaceAll(match[1], ",", "")
+			if num, err := strconv.Atoi(nStr); err == nil {
+				viewCount = num
+			}
+		}
+
+		likeCountStr := e.DOM.Find("div.articleHit > span#bbsRecommendNum1").Text()
+		likeCountStr = strings.TrimSpace(likeCountStr)
+		likeCountStr = strings.ReplaceAll(likeCountStr, ",", "")
+		likeCount, _ := strconv.Atoi(likeCountStr)
+
+		commentCountStr := e.DOM.Find("div.topmenuInfo a > span").Text()
+		commentCount, err := strconv.Atoi(commentCountStr)
+		if err != nil {
+			commentCount = 0
+		}
+
+		results = append(results, &InvenIncidentResult{
+			PostURL:      postURL,
+			Title:        title,
+			DateStr:      dateStr,
+			Server:       server,
+			Author:       author,
+			ViewCount:    viewCount,
+			LikeCount:    likeCount,
+			CommentCount: commentCount,
+			HasImage:     false,
+		})
+	})
+
+	for pageNum := 1; pageNum <= maxPages; pageNum++ {
+		url := fmt.Sprintf("https://www.inven.co.kr/search/lostark/article/%s/%d", url.PathEscape(keyword), pageNum)
+		collector.Visit(url)
+	}
+
+	collector.Wait()
+
+	for _, res := range results {
+		if res.ViewCount > 1000 {
+			fmt.Printf("%+v\n", res)
+		}
+	}
+
+	return results, nil
+
 }
