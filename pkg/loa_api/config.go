@@ -7,6 +7,6 @@ var (
 )
 
 type Config struct {
-	BaseURL string   `mapstructure:"base_url"`
-	APIKeys []string `mapstructure:"api_key"`
+	BaseURL string   `mapstructure:"LOA_BASE_URL"`
+	APIKeys []string `mapstructure:"LOA_API_KEY"`
 }

@@ -1,41 +1,49 @@
 package cmd
 
 import (
+	"context"
+	"fmt"
+
 	"github.com/jm199seo/dhg_bot/util/logger"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
 
+const (
+	EnvKeyDopplerClientSecret = "DOPPLER_CLIENT_SECRET"
+)
+
 var (
-	cfgFile string
+	Env = "dev"
+)
+
+var (
 	rootCmd = &cobra.Command{
 		Use:   "daelhaega",
 		Short: "dhg",
-		PersistentPreRun: func(cmd *cobra.Command, args []string) {
-			if cfgFile != "" {
-				viper.SetConfigFile(cfgFile)
-			} else {
-				viper.AddConfigPath(".")
-				viper.SetConfigName("config")
-				viper.SetConfigType("yaml")
+		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+			if cs := viper.GetString(EnvKeyDopplerClientSecret); cs == "" {
+				return fmt.Errorf("%s is not set", EnvKeyDopplerClientSecret)
 			}
-			viper.AutomaticEnv()
-			viper.WatchConfig()
-
+			if env := viper.GetString("ENVIRONMENT"); env != "" {
+				Env = env
+			}
+			// init global logger
 			logger.InitLogger()
-
-			if err := viper.ReadInConfig(); err == nil {
-				logger.Log.Infow("config loaded",
-					"config", viper.ConfigFileUsed(),
-				)
-			}
+			return nil
 		},
 	}
 )
 
-func Execute() error {
-	return rootCmd.Execute()
+func Execute(ctx context.Context) error {
+	return rootCmd.ExecuteContext(ctx)
 }
+
 func init() {
-	rootCmd.AddCommand(runDiscordBot)
+	cobra.OnInitialize(initConfig)
+	rootCmd.AddCommand(runDiscordBotCmd)
+}
+
+func initConfig() {
+	viper.AutomaticEnv()
 }

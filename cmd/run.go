@@ -1,58 +1,55 @@
 package cmd
 
 import (
-	"context"
-	"os"
-	"os/signal"
-	"syscall"
+	"fmt"
 
 	"github.com/jm199seo/dhg_bot/internal/watcher"
+	"github.com/jm199seo/dhg_bot/pkg/doppler"
 	"github.com/jm199seo/dhg_bot/util/logger"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
 
 var (
-	runDiscordBot = &cobra.Command{
+	discordBotProjectName = "dalhaega"
+	runDiscordBotCmd      = &cobra.Command{
 		Use:       "discord_bot",
 		Aliases:   []string{"dc"},
 		Short:     "달해가 봇",
 		ValidArgs: []string{"debug"},
-		Run: func(cmd *cobra.Command, args []string) {
-			ctx, cancel := context.WithCancel(context.Background())
+		PreRunE: func(cmd *cobra.Command, args []string) error {
+			dopplerClient := doppler.NewClient(viper.GetString(EnvKeyDopplerClientSecret))
+			if err := dopplerClient.InjectConfigToViper(cmd.Context(), discordBotProjectName, Env, viper.GetViper()); err != nil {
+				return fmt.Errorf("failed to fetch remote config: %w", err)
+			}
+			return nil
+		},
+		RunE: func(cmd *cobra.Command, args []string) error {
+			ctx := cmd.Context()
 			s, cleanup, err := watcher.InitializeWatcher(ctx, viper.GetViper())
 			if err != nil {
-				panic(err)
+				return err
 			}
 			defer func() {
 				cleanup()
-				cancel()
 			}()
-
-			// get debug flag from args using cobra args
-			if debug, err := cmd.Flags().GetBool("debug"); err != nil {
-				logger.Log.Panicln(err)
-			} else if debug {
+			if isDebug := viper.GetViper().GetBool(FlagDebug); isDebug {
 				logger.Log.Infoln("debug mode")
 			} else {
 				s.StartWatcher(ctx)
 			}
 
-			sig := make(chan os.Signal, 1)
-			signals := []os.Signal{syscall.SIGTERM, os.Interrupt, syscall.SIGINT}
-			signal.Notify(sig, signals...)
-			go func() {
-				<-sig
-				signal.Reset(signals...)
-				logger.Log.Infoln("stopping server")
-				cancel()
-			}()
-
 			<-ctx.Done()
+			return nil
 		},
 	}
 )
 
+const (
+	FlagDebug = "debug"
+)
+
 func init() {
-	runDiscordBot.Flags().BoolP("debug", "d", false, "debug mode")
+	runDiscordBotCmd.Flags().BoolP(FlagDebug, "d", false, "debug mode")
+	viper.BindPFlag(FlagDebug, runDiscordBotCmd.Flags().Lookup(FlagDebug))
 }
