@@ -26,6 +26,7 @@ var (
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
+			isDebug := viper.GetBool(FlagDebug)
 			s, cleanup, err := watcher.InitializeWatcher(ctx, viper.GetViper())
 			if err != nil {
 				return err
@@ -33,7 +34,8 @@ var (
 			defer func() {
 				cleanup()
 			}()
-			if isDebug := viper.GetViper().GetBool(FlagDebug); isDebug {
+
+			if isDebug {
 				logger.Log.Infoln("debug mode")
 			} else {
 				s.StartWatcher(ctx)
