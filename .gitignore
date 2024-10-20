@@ -2,3 +2,4 @@
 .air.*
 tmp/*
 config.yml
+.env
