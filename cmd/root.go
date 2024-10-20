@@ -45,5 +45,9 @@ func init() {
 }
 
 func initConfig() {
+	viper.SetConfigFile(".env")
 	viper.AutomaticEnv()
+	if err := viper.ReadInConfig(); err != nil {
+		panic(fmt.Sprintf("Error reading config file: %v", err))
+	}
 }
