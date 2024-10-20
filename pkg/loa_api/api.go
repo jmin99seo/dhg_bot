@@ -52,16 +52,18 @@ func (c *CharacterInfo) UnmarshalJSON(b []byte) error {
 func (c *Client) GetAllCharactersForCharacter(ctx context.Context, name string) ([]CharacterInfo, error) {
 	res, err := c.Get(ctx, fmt.Sprintf("characters/%s/siblings", url.QueryEscape(name)))
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to get characters: %w", err)
 	}
 	body, err := io.ReadAll(res.Body)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to read body: %w", err)
 	}
 	defer res.Body.Close()
 	var ci []CharacterInfo
-	err = json.Unmarshal(body, &ci)
-	return ci, err
+	if err := json.Unmarshal(body, &ci); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal characters: %w", err)
+	}
+	return ci, nil
 }
 
 type DetailedCharacterInfo struct {

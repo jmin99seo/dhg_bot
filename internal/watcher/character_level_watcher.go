@@ -29,7 +29,6 @@ func (s *Server) WatchCharacterLevel(ctx context.Context) error {
 			mainCharName := c.Name
 			apiCharacters, err := s.la.GetAllCharactersForCharacter(ctx, mainCharName)
 			if err != nil {
-				// logger.Log.Errorf("loaAPI: failed to get all characters for %s: %v", mainCharName, err)
 				return err
 			}
 			if len(apiCharacters) == 0 {
@@ -38,8 +37,7 @@ func (s *Server) WatchCharacterLevel(ctx context.Context) error {
 
 			localCharacters, err := s.mg.SubCharactersForMainCharacter(ctx, mainCharName)
 			if err != nil {
-				logger.Log.Errorf("mongo: failed to get sub characters for %s: %v", mainCharName, err)
-				return err
+				return fmt.Errorf("mongo: failed to get sub characters for %s: %w", mainCharName, err)
 			}
 
 			var (
@@ -79,8 +77,7 @@ func (s *Server) WatchCharacterLevel(ctx context.Context) error {
 			if len(newCharacters) > 0 {
 				err = s.mg.SaveSubCharacters(ctx, mainCharName, newCharacters)
 				if err != nil {
-					logger.Log.Errorf("mongo: failed to save new sub characters for %s[%v]: %v", mainCharName, newCharacters, err)
-					return err
+					return fmt.Errorf("mongo: failed to save new sub characters for %s[%v]: %w", mainCharName, newCharacters, err)
 				}
 			}
 
@@ -98,8 +95,7 @@ func (s *Server) WatchCharacterLevel(ctx context.Context) error {
 					updatedCharInfo := uc
 					err = s.mg.UpdateChracter(ctx, prevChar)
 					if err != nil {
-						logger.Log.Errorf("mongo: failed to update character %s: %v", uc.CharacterName, err)
-						return err
+						return fmt.Errorf("mongo: failed to update character %s: %w", uc.CharacterName, err)
 					}
 					logger.Log.Infof("updated character [%s][%s] (%s) to level : %.2f", updatedCharInfo.ServerName, updatedCharInfo.CharacterName, updatedCharInfo.CharacterClassName, updatedCharInfo.ItemMaxLevel)
 					imgURL := "https://iili.io/HI0U4pe.jpg"
@@ -145,7 +141,7 @@ func (s *Server) WatchCharacterLevel(ctx context.Context) error {
 	}
 
 	if err := eg.Wait(); err != nil {
-		// logger.Log.Error(err)
+		logger.Log.Errorf("error in character level watcher: %w", err)
 		return err
 	}
 

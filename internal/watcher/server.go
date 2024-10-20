@@ -2,9 +2,11 @@ package watcher
 
 import (
 	"context"
+	"fmt"
 	"time"
 
-	"github.com/go-co-op/gocron"
+	"github.com/go-co-op/gocron/v2"
+	"github.com/google/uuid"
 	"github.com/jm199seo/dhg_bot/pkg/discord"
 	"github.com/jm199seo/dhg_bot/pkg/loa_api"
 	"github.com/jm199seo/dhg_bot/pkg/mongo"
@@ -16,14 +18,33 @@ type Server struct {
 	dc *discord.Client
 	mg *mongo.Client
 
-	sch *gocron.Scheduler
+	sch gocron.Scheduler
 }
 
-func NewServer(cfg Config, la *loa_api.Client, dc *discord.Client, mg *mongo.Client) (*Server, func(), error) {
-	cleanup := func() {
+func NewServer(
+	cfg Config,
+	la *loa_api.Client,
+	dc *discord.Client,
+	mg *mongo.Client,
+) (*Server, func(), error) {
+	sch, err := gocron.NewScheduler(
+		gocron.WithLocation(time.UTC),
+		gocron.WithGlobalJobOptions(
+			gocron.WithSingletonMode(gocron.LimitModeReschedule),
+			gocron.WithEventListeners(
+				gocron.AfterJobRunsWithPanic(func(jobID uuid.UUID, jobName string, recoverData any) {
+					logger.Log.Errorf("panic in job %s: %v", jobName, recoverData)
+				}),
+			),
+		),
+	)
+	if err != nil {
+		return nil, func() {}, fmt.Errorf("failed to create scheduler: %w", err)
 	}
-
-	sch := gocron.NewScheduler(time.UTC)
+	cleanup := func() {
+		logger.Log.Debugln("shutting down scheduler")
+		sch.Shutdown()
+	}
 
 	return &Server{
 		la:  la,
@@ -36,22 +57,19 @@ func NewServer(cfg Config, la *loa_api.Client, dc *discord.Client, mg *mongo.Cli
 func (s *Server) StartWatcher(pCtx context.Context) {
 	logger.Log.Debugln("start watcher")
 
-	ctx := context.Background()
-	watchCharLevelJob, err := s.sch.Every(1).Minute().Do(s.WatchCharacterLevel, ctx)
+	watchCharLevelJob, err := s.sch.NewJob(
+		gocron.DurationJob(
+			time.Minute,
+		),
+		gocron.NewTask(
+			s.WatchCharacterLevel,
+			pCtx,
+		),
+	)
 	if err != nil {
 		logger.Log.Errorf("watch char lvl error: %v", err)
 	}
-	watchCharLevelJob.Tag("watchCharLevelJob")
-	s.sch.SingletonMode()
-	s.sch.StartAsync()
+	logger.Log.Debugf("starting watchCharLevelJob %s", watchCharLevelJob.ID())
 
-	gocron.SetPanicHandler(func(jobName string, data any) {
-		logger.Log.Errorf("panic in job %s: %v", jobName, data)
-	})
-
-	go func() {
-		<-pCtx.Done()
-		s.sch.Stop()
-		logger.Log.Debugf("stopped watcher")
-	}()
+	s.sch.Start()
 }
