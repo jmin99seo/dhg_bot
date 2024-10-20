@@ -14,7 +14,7 @@ var (
 )
 
 type Config struct {
-	URI string `mapstructure:"uri"`
+	URI string `mapstructure:"mongo_uri"`
 
 	// Database
 	DatabaseName string

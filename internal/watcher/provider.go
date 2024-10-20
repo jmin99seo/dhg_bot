@@ -11,6 +11,6 @@ var (
 
 func ProvideConfigFromEnvironment(cfg *viper.Viper) (Config, error) {
 	watcherConfig := DefaultConfig
-	err := cfg.UnmarshalKey("watcher", &watcherConfig)
+	err := cfg.Unmarshal(&watcherConfig)
 	return watcherConfig, err
 }

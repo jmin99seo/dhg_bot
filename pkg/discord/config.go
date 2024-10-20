@@ -13,15 +13,15 @@ var (
 )
 
 type Config struct {
-	ApplicationID       string `mapstructure:"application_id"`
-	PublicKey           string `mapstructure:"public_key"`
-	BotToken            string `mapstructure:"bot_token"`
-	WebhookURL          string `mapstructure:"webhook_url"`
-	HokieWorldChannelID string `mapstructure:"hokie_world_channel_id"`
-	DalhaegaGuildID     string `mapstructure:"dalhaega_guild_id"`
+	ApplicationID       string `mapstructure:"DISCORD_APPLICATION_ID"`
+	PublicKey           string `mapstructure:"DISCORD_PUBLIC_KEY"`
+	BotToken            string `mapstructure:"DISCORD_BOT_TOKEN"`
+	WebhookURL          string `mapstructure:"DISCORD_WEBHOOK_URL"`
+	HokieWorldChannelID string `mapstructure:"DISCORD_HOKIE_WORLD_CHANNEL_ID"`
+	DalhaegaGuildID     string `mapstructure:"DISCORD_DALHAEGA_GUILD_ID"`
 
 	// UserIDs
-	AdminUserID string `mapstructure:"admin_user_id"`
+	AdminUserID string `mapstructure:"DISCORD_ADMIN_USER_ID"`
 }
 
 // bot invite URL

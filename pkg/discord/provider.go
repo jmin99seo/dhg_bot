@@ -6,6 +6,6 @@ import (
 
 func ProvideConfigFromEnvironment(cfg *viper.Viper) (Config, error) {
 	discordConfig := DefaultConfig
-	err := cfg.UnmarshalKey("discord", &discordConfig)
+	err := cfg.Unmarshal(&discordConfig)
 	return discordConfig, err
 }
