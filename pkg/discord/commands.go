@@ -218,13 +218,13 @@ func (c *Client) guildSearchCommand(s *discordgo.Session, i *discordgo.Interacti
 		subChars = append(subChars, result)
 	}
 
-	slices.SortFunc(subChars, func(i, j loa_api.DetailedCharacterInfo) bool {
+	slices.SortFunc(subChars, func(i, j loa_api.DetailedCharacterInfo) int {
 		iNoComma := strings.ReplaceAll(i.ItemMaxLevel, ",", "")
 		jNoComma := strings.ReplaceAll(j.ItemMaxLevel, ",", "")
 
 		iMaxLevel, _ := strconv.ParseFloat(iNoComma, 64)
 		jMaxLevel, _ := strconv.ParseFloat(jNoComma, 64)
-		return iMaxLevel > jMaxLevel
+		return int(jMaxLevel - iMaxLevel) // Descending order
 	})
 
 	for _, result := range subChars {
